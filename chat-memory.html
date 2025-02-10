@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chats Memo JSON Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: white;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            font-size: 22px;
+        }
+        pre {
+            background-color: #1e1e1e;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: left;
+            overflow-x: auto;
+            max-height: 400px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>📜 AI Chat Memory (chats_memo)</h1>
+    <pre id="jsonOutput">Loading...</pre>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getFirestore, collection, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyBe9a58zaQCrBSGeWwcIVa_PnZABoH6zV4",
+            authDomain: "tudds-ccd0wn.firebaseapp.com",
+            databaseURL: "https://tudds-ccd0wn-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "tudds-ccd0wn",
+            storageBucket: "tudds-ccd0wn.appspot.com",
+            messagingSenderId: "786974954352",
+            appId: "1:786974954352:web:8cdc279d2e7dc1fb9bb5b5",
+            measurementId: "G-E1RZQYQXQN"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const chatCollection = collection(db, "chats_memo");
+
+        /**
+         * Fetches and displays chats_memo as JSON in real-time.
+         */
+        function displayChatsAsJSON() {
+            const q = query(chatCollection, orderBy("timestamp", "asc"));
+
+            onSnapshot(q, (snapshot) => {
+                const messages = [];
+                snapshot.forEach((doc) => {
+                    messages.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+
+                // Convert array to pretty JSON format
+                document.getElementById("jsonOutput").textContent = JSON.stringify(messages, null, 2);
+            });
+        }
+
+        // Start listening for changes
+        displayChatsAsJSON();
+    </script>
+</body>
+</html>
