@@ -22,14 +22,24 @@
             border-radius: 5px;
             text-align: left;
             overflow-x: auto;
-            max-height: 400px;
+            max-height: 500px;
             white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .loading {
+            color: #ffcc00;
+            font-style: italic;
+        }
+        .error {
+            color: #ff4444;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <h1>📜 AI Chat Memory (chats_memo)</h1>
-    <pre id="jsonOutput">Loading...</pre>
+    <h1>📜 AI Chat Memory (`chats_memo`)</h1>
+    <pre id="jsonOutput" class="loading">Loading chats...</pre>
 
     <!-- Firebase SDK -->
     <script type="module">
@@ -55,13 +65,15 @@
         const chatCollection = collection(db, "chats_memo");
 
         /**
-         * Fetches and displays chats_memo as JSON in real-time.
+         * Fetches and displays `chats_memo` as JSON in real-time.
          */
         function displayChatsAsJSON() {
+            const output = document.getElementById("jsonOutput");
             const q = query(chatCollection, orderBy("timestamp", "asc"));
 
             onSnapshot(q, (snapshot) => {
                 const messages = [];
+
                 snapshot.forEach((doc) => {
                     messages.push({
                         id: doc.id,
@@ -69,8 +81,17 @@
                     });
                 });
 
-                // Convert array to pretty JSON format
-                document.getElementById("jsonOutput").textContent = JSON.stringify(messages, null, 2);
+                // If no messages, show empty state
+                if (messages.length === 0) {
+                    output.textContent = "⚠️ No chat history available.";
+                    output.className = "error";
+                } else {
+                    output.textContent = JSON.stringify(messages, null, 2);
+                    output.className = ""; // Remove loading state
+                }
+            }, (error) => {
+                output.textContent = "❌ Error fetching data: " + error.message;
+                output.className = "error";
             });
         }
 
