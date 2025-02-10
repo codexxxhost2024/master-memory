@@ -26,7 +26,6 @@ export class ChatManager {
         this.lastUserMessageType = null;
         this.currentTranscript = '';
 
-        // Load chat history on init
         this.loadChatHistory();
         this.listenForMessages();
     }
@@ -40,12 +39,12 @@ export class ChatManager {
     }
 
     /**
-     * Handles Deepgram transcription and updates the UI & Firestore correctly.
+     * Adds a user audio transcription message.
      */
     async addUserAudioMessage(transcript) {
         if (transcript) {
             this.addMessageToUI('user', transcript);
-            await this.saveMessage('user', transcript); // Saves transcribed text
+            await this.saveMessage('user', transcript); // Saves actual transcribed text
         } else {
             this.addMessageToUI('user', 'User sent an audio (No transcription)');
         }
@@ -71,7 +70,7 @@ export class ChatManager {
     }
 
     /**
-     * Continuously updates the AI streaming message in the UI.
+     * Updates AI streaming response in UI.
      */
     async updateStreamingMessage(text) {
         if (!this.currentStreamingMessage) {
@@ -83,7 +82,7 @@ export class ChatManager {
     }
 
     /**
-     * Finalizes the AI model message and saves it to Firestore.
+     * Finalizes the AI response and saves it correctly to Firestore.
      */
     finalizeStreamingMessage() {
         if (this.currentStreamingMessage) {
@@ -93,18 +92,18 @@ export class ChatManager {
             this.lastUserMessageType = null;
             this.currentTranscript = '';
 
-            // Save the AI's final response to Firestore
+            // ✅ Now correctly saves AI responses as "ai"
             this.saveMessage('ai', finalText);
         }
     }
 
     /**
-     * Saves a message to Firestore.
+     * Saves messages to Firestore with correct sender.
      */
     async saveMessage(sender, message) {
         try {
             await addDoc(chatCollection, {
-                sender: sender,  // Fixing sender label (user/ai)
+                sender: sender,  // Now correctly differentiates between 'user' and 'ai'
                 message: message,
                 timestamp: new Date().toISOString()
             });
@@ -115,7 +114,7 @@ export class ChatManager {
     }
 
     /**
-     * Loads past chat history from Firestore (one-time fetch on init).
+     * Loads chat history from Firestore.
      */
     async loadChatHistory() {
         const q = query(chatCollection, orderBy("timestamp", "asc"));
@@ -130,12 +129,12 @@ export class ChatManager {
     }
 
     /**
-     * Real-time listener that updates the UI whenever new messages arrive in Firestore.
+     * Real-time listener that updates UI when Firestore updates.
      */
     listenForMessages() {
         const q = query(chatCollection, orderBy("timestamp", "asc"));
         onSnapshot(q, (snapshot) => {
-            this.chatContainer.innerHTML = ""; // Clear chat before updating
+            this.chatContainer.innerHTML = ""; // Clear UI before updating
 
             snapshot.forEach((doc) => {
                 const { sender, message } = doc.data();
@@ -147,7 +146,7 @@ export class ChatManager {
     }
 
     /**
-     * Helper function: Adds messages to the UI.
+     * Adds messages to the UI with correct sender.
      */
     addMessageToUI(sender, text) {
         const messageDiv = document.createElement('div');
@@ -158,7 +157,7 @@ export class ChatManager {
     }
 
     /**
-     * UI helper: Scrolls to bottom of chat.
+     * Scrolls chat UI to bottom.
      */
     scrollToBottom() {
         this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
