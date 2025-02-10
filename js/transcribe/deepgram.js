@@ -29,6 +29,10 @@ export class DeepgramTranscriber {
     this.isConnected = false;
     this.eventListeners = new Map();
     this.sampleRate = sampleRate;
+
+    // 👇 Track last transcript to avoid duplicates
+    this.lastTranscript = "";
+
     console.info('DeepgramTranscriber initialized');
   }
 
@@ -53,6 +57,7 @@ export class DeepgramTranscriber {
             encoding: 'linear16',
             sample_rate: this.sampleRate,
             channels: 1,
+            // Ensure partial transcripts aren't flooding duplicates
             interim_results: false,
             punctuate: true,
             endpointing: 800
@@ -73,11 +78,19 @@ export class DeepgramTranscriber {
             if (transcript) {
               console.debug('Received transcript:', transcript);
 
-              // Save full transcript to Firestore
-              await saveMessage('user', transcript);
+              // 👇 Check for duplicates before saving
+              if (transcript !== this.lastTranscript) {
+                // Save full transcript to Firestore
+                await saveMessage('user', transcript);
 
-              // Emit event for UI update
-              this.emit('transcription', transcript);
+                // Emit event for UI update
+                this.emit('transcription', transcript);
+
+                // Update the last transcript
+                this.lastTranscript = transcript;
+              } else {
+                console.debug('Duplicate transcript detected, skipping save.');
+              }
             }
           }
         } catch (error) {
