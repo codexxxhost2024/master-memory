@@ -1,8 +1,6 @@
 // Import Firebase modules
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-import { 
-  getFirestore, collection, addDoc, query, orderBy, getDocs, onSnapshot 
-} from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, orderBy, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 
 // Firebase Config
 const firebaseConfig = {
@@ -28,7 +26,7 @@ export class ChatManager {
         this.lastUserMessageType = null;
         this.currentTranscript = '';
 
-        // Load and listen to chat history on init
+        // Load chat history on init
         this.loadChatHistory();
         this.listenForMessages();
     }
@@ -37,62 +35,43 @@ export class ChatManager {
      * Adds a user text message to UI and saves to Firestore.
      */
     async addUserMessage(text) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'chat-message user-message';
-        messageDiv.textContent = text;
-        this.chatContainer.appendChild(messageDiv);
-
-        this.lastUserMessageType = 'text';
-        this.scrollToBottom();
-
-        // Save user text to Firestore
+        this.addMessageToUI('user', text);
         await this.saveMessage('user', text);
     }
 
     /**
-     * Adds a placeholder for user audio in the UI
-     * WITHOUT saving "User sent audio" to Firestore.
-     * Deepgram (or other logic) can save the transcript later.
+     * Handles Deepgram transcription and updates the UI & Firestore correctly.
      */
-    addUserAudioMessage() {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'chat-message user-message';
-        messageDiv.textContent = 'User sent audio';
-        this.chatContainer.appendChild(messageDiv);
-
-        this.lastUserMessageType = 'audio';
-        this.scrollToBottom();
-
-        // NO Firestore save here to avoid double-saving placeholders.
+    async addUserAudioMessage(transcript) {
+        if (transcript) {
+            this.addMessageToUI('user', transcript);
+            await this.saveMessage('user', transcript); // Saves transcribed text
+        } else {
+            this.addMessageToUI('user', 'User sent an audio (No transcription)');
+        }
     }
 
     /**
      * Starts streaming an AI model message.
      */
     startModelMessage() {
-        // Finalize any existing streaming message first
         if (this.currentStreamingMessage) {
             this.finalizeStreamingMessage();
         }
-
-        // If no user message was shown, we assume user sent audio
         if (!this.lastUserMessageType) {
-            this.addUserAudioMessage();
+            this.addMessageToUI('user', 'User sent an audio...');
         }
 
-        // Create a new streaming AI message
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message model-message streaming';
         this.chatContainer.appendChild(messageDiv);
-
         this.currentStreamingMessage = messageDiv;
         this.currentTranscript = '';
-
         this.scrollToBottom();
     }
 
     /**
-     * Continuously update the AI streaming message in the UI.
+     * Continuously updates the AI streaming message in the UI.
      */
     async updateStreamingMessage(text) {
         if (!this.currentStreamingMessage) {
@@ -108,12 +87,8 @@ export class ChatManager {
      */
     finalizeStreamingMessage() {
         if (this.currentStreamingMessage) {
-            this.currentStreamingMessage.classList.remove('streaming');
-
-            // Capture final text
             const finalText = this.currentStreamingMessage.textContent;
-
-            // Reset streaming state
+            this.currentStreamingMessage.classList.remove('streaming');
             this.currentStreamingMessage = null;
             this.lastUserMessageType = null;
             this.currentTranscript = '';
@@ -124,29 +99,12 @@ export class ChatManager {
     }
 
     /**
-     * Simple UI helper: scroll to the bottom of chat.
-     */
-    scrollToBottom() {
-        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
-    }
-
-    /**
-     * Clear the chat in the UI (not Firestore).
-     */
-    clear() {
-        this.chatContainer.innerHTML = '';
-        this.currentStreamingMessage = null;
-        this.lastUserMessageType = null;
-        this.currentTranscript = '';
-    }
-
-    /**
      * Saves a message to Firestore.
      */
     async saveMessage(sender, message) {
         try {
             await addDoc(chatCollection, {
-                sender: sender,
+                sender: sender,  // Fixing sender label (user/ai)
                 message: message,
                 timestamp: new Date().toISOString()
             });
@@ -165,10 +123,7 @@ export class ChatManager {
 
         querySnapshot.forEach((doc) => {
             const { sender, message } = doc.data();
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `chat-message ${sender === 'user' ? 'user-message' : 'model-message'}`;
-            messageDiv.textContent = message;
-            this.chatContainer.appendChild(messageDiv);
+            this.addMessageToUI(sender, message);
         });
 
         this.scrollToBottom();
@@ -184,13 +139,38 @@ export class ChatManager {
 
             snapshot.forEach((doc) => {
                 const { sender, message } = doc.data();
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `chat-message ${sender === 'user' ? 'user-message' : 'model-message'}`;
-                messageDiv.textContent = message;
-                this.chatContainer.appendChild(messageDiv);
+                this.addMessageToUI(sender, message);
             });
 
             this.scrollToBottom();
         });
+    }
+
+    /**
+     * Helper function: Adds messages to the UI.
+     */
+    addMessageToUI(sender, text) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${sender === 'user' ? 'user-message' : 'model-message'}`;
+        messageDiv.textContent = text;
+        this.chatContainer.appendChild(messageDiv);
+        this.scrollToBottom();
+    }
+
+    /**
+     * UI helper: Scrolls to bottom of chat.
+     */
+    scrollToBottom() {
+        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+    }
+
+    /**
+     * Clears chat UI.
+     */
+    clear() {
+        this.chatContainer.innerHTML = '';
+        this.currentStreamingMessage = null;
+        this.lastUserMessageType = null;
+        this.currentTranscript = '';
     }
 }
