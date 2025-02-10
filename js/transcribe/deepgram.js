@@ -1,7 +1,26 @@
+// Import Firebase modules
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+import { getFirestore, collection, addDoc, query, orderBy, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+
+// Firebase Config
+const firebaseConfig = {
+    apiKey: "AIzaSyBe9a58zaQCrBSGeWwcIVa_PnZABoH6zV4",
+    authDomain: "tudds-ccd0wn.firebaseapp.com",
+    databaseURL: "https://tudds-ccd0wn-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "tudds-ccd0wn",
+    storageBucket: "tudds-ccd0wn.appspot.com",
+    messagingSenderId: "786974954352",
+    appId: "1:786974954352:web:8cdc279d2e7dc1fb9bb5b5",
+    measurementId: "G-E1RZQYQXQN"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const chatCollection = collection(db, "chats_memo");
+
 /**
- * Establishes a websocket connection to Deepgram API
- * for real-time audio transcription
- * Utilizes Free Tier of Deepgram API
+ * Handles real-time audio transcription using Deepgram API
  */
 export class DeepgramTranscriber {
     constructor(apiKey, sampleRate) {
@@ -25,7 +44,7 @@ export class DeepgramTranscriber {
             this.ws.onopen = () => {
                 this.isConnected = true;
                 console.info('WebSocket connection established');
-                
+
                 const config = {
                     type: 'Configure',
                     features: {
@@ -39,30 +58,28 @@ export class DeepgramTranscriber {
                         endpointing: 800
                     },
                 };
-                
+
                 console.debug('Sending configuration:', config);
                 this.ws.send(JSON.stringify(config));
                 this.emit('connected');
             };
 
-            this.ws.onmessage = (event) => {
+            this.ws.onmessage = async (event) => {
                 try {
-                    // console.debug('Received WebSocket message:', event.data);
                     const response = JSON.parse(event.data);
                     if (response.type === 'Results') {
                         const transcript = response.channel?.alternatives[0]?.transcript;
 
                         if (transcript) {
-                            // console.debug('Received transcript:', transcript);
+                            console.debug('Received transcript:', transcript);
+                            
+                            // Save full transcript to Firestore
+                            await saveMessage('user', transcript);
+
+                            // Emit event for UI update
                             this.emit('transcription', transcript);
-                        } else {
-                            // console.warn('Received Results message but no transcript found:', response);
                         }
-
-                    } else {
-                        // console.debug('Received non-Results message:', response.type);
                     }
-
                 } catch (error) {
                     console.error('Error processing WebSocket message:', error);
                     this.emit('error', error);
@@ -116,3 +133,45 @@ export class DeepgramTranscriber {
         }
     }
 }
+
+/**
+ * Saves chat messages (including transcriptions) to Firestore.
+ */
+async function saveMessage(sender, message) {
+    try {
+        const messageData = {
+            sender: sender,
+            message: message,
+            timestamp: new Date().toISOString()
+        };
+
+        await addDoc(chatCollection, messageData);
+        console.log("Message saved:", messageData);
+    } catch (error) {
+        console.error("Error saving message:", error);
+    }
+}
+
+/**
+ * Listens for new messages in Firestore and updates UI.
+ */
+function listenForMessages() {
+    const q = query(chatCollection, orderBy("timestamp", "asc"));
+    onSnapshot(q, (snapshot) => {
+        document.getElementById('chatHistory').innerHTML = ""; // Clear chat before updating
+
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${data.sender === 'user' ? 'user-message' : 'model-message'}`;
+            messageDiv.textContent = data.message || "No transcription available.";
+
+            document.getElementById('chatHistory').appendChild(messageDiv);
+        });
+
+        document.getElementById('chatHistory').scrollTop = document.getElementById('chatHistory').scrollHeight;
+    });
+}
+
+// Start listening for Firestore updates
+listenForMessages();
