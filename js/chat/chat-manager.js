@@ -33,6 +33,9 @@ export class ChatManager {
         this.listenForMessages();
     }
 
+    /**
+     * Displays and saves a user text message to Firestore.
+     */
     async addUserMessage(text) {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message user-message';
@@ -45,22 +48,29 @@ export class ChatManager {
         await this.saveMessage('user', text);
     }
 
-    async addUserAudioMessage() {
+    /**
+     * Displays a placeholder for audio, but DOES NOT save to Firestore.
+     * Deepgram code will handle storing the actual transcript later.
+     */
+    addUserAudioMessage() {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message user-message';
-        messageDiv.textContent = 'User sent audio';
+        messageDiv.textContent = 'User sent audio'; 
         this.chatContainer.appendChild(messageDiv);
         this.lastUserMessageType = 'audio';
         this.scrollToBottom();
 
-        // Save to Firestore
-        await this.saveMessage('user', 'User sent audio');
+        // NOTICE: NO Firestore save here, to avoid double-saves.
     }
 
+    /**
+     * Starts AI (model) message in streaming mode.
+     */
     startModelMessage() {
         if (this.currentStreamingMessage) {
             this.finalizeStreamingMessage();
         }
+        // If we have no user message type, treat it as if user sent audio
         if (!this.lastUserMessageType) {
             this.addUserAudioMessage();
         }
@@ -73,6 +83,9 @@ export class ChatManager {
         this.scrollToBottom();
     }
 
+    /**
+     * Appends text to an in-progress model (AI) message.
+     */
     async updateStreamingMessage(text) {
         if (!this.currentStreamingMessage) {
             this.startModelMessage();
@@ -82,15 +95,22 @@ export class ChatManager {
         this.scrollToBottom();
     }
 
+    /**
+     * Finalizes the model message and saves it to Firestore.
+     */
     finalizeStreamingMessage() {
         if (this.currentStreamingMessage) {
             this.currentStreamingMessage.classList.remove('streaming');
+            
+            // Capture final text before nulling out
+            const finalText = this.currentStreamingMessage.textContent;
+
             this.currentStreamingMessage = null;
             this.lastUserMessageType = null;
             this.currentTranscript = '';
 
-            // Save AI response to Firestore
-            this.saveMessage('ai', this.currentStreamingMessage.textContent);
+            // Save the AI response to Firestore
+            this.saveMessage('ai', finalText);
         }
     }
 
@@ -105,7 +125,9 @@ export class ChatManager {
         this.currentTranscript = '';
     }
 
-    /** Save message to Firestore */
+    /**
+     * Saves a message to Firestore (user or AI).
+     */
     async saveMessage(sender, message) {
         try {
             await addDoc(chatCollection, {
@@ -119,7 +141,9 @@ export class ChatManager {
         }
     }
 
-    /** Load past chat history */
+    /**
+     * Loads past chat history from Firestore (one-time fetch on init).
+     */
     async loadChatHistory() {
         const q = query(chatCollection, orderBy("timestamp", "asc"));
         const querySnapshot = await getDocs(q);
@@ -135,7 +159,9 @@ export class ChatManager {
         this.scrollToBottom();
     }
 
-    /** Real-time listener to update chat */
+    /**
+     * Real-time listener to reflect new messages as they come in.
+     */
     listenForMessages() {
         const q = query(chatCollection, orderBy("timestamp", "asc"));
         onSnapshot(q, (snapshot) => {
