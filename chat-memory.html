@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chats Memo JSON Viewer</title>
+    <title>AI Memory - Chat History</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -18,28 +18,25 @@
         }
         pre {
             background-color: #1e1e1e;
-            padding: 10px;
+            padding: 15px;
             border-radius: 5px;
             text-align: left;
             overflow-x: auto;
             max-height: 500px;
             white-space: pre-wrap;
+            border: 1px solid #444;
+        }
+        .status {
+            margin-bottom: 10px;
             font-size: 14px;
-            line-height: 1.5;
-        }
-        .loading {
-            color: #ffcc00;
-            font-style: italic;
-        }
-        .error {
-            color: #ff4444;
-            font-weight: bold;
+            color: #bbb;
         }
     </style>
 </head>
 <body>
-    <h1>📜 AI Chat Memory (`chats_memo`)</h1>
-    <pre id="jsonOutput" class="loading">Loading chats...</pre>
+    <h1>📜 AI Memory - Chat History</h1>
+    <p class="status">Fetching real-time data from Firestore...</p>
+    <pre id="jsonOutput">Loading...</pre>
 
     <!-- Firebase SDK -->
     <script type="module">
@@ -65,37 +62,25 @@
         const chatCollection = collection(db, "chats_memo");
 
         /**
-         * Fetches and displays `chats_memo` as JSON in real-time.
+         * Fetches and displays the full chat history as JSON
          */
         function displayChatsAsJSON() {
-            const output = document.getElementById("jsonOutput");
             const q = query(chatCollection, orderBy("timestamp", "asc"));
 
             onSnapshot(q, (snapshot) => {
-                const messages = [];
+                const messages = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    sender: doc.data().sender,
+                    message: doc.data().message,
+                    timestamp: doc.data().timestamp
+                }));
 
-                snapshot.forEach((doc) => {
-                    messages.push({
-                        id: doc.id,
-                        ...doc.data()
-                    });
-                });
-
-                // If no messages, show empty state
-                if (messages.length === 0) {
-                    output.textContent = "⚠️ No chat history available.";
-                    output.className = "error";
-                } else {
-                    output.textContent = JSON.stringify(messages, null, 2);
-                    output.className = ""; // Remove loading state
-                }
-            }, (error) => {
-                output.textContent = "❌ Error fetching data: " + error.message;
-                output.className = "error";
+                document.querySelector(".status").textContent = `Last Updated: ${new Date().toLocaleString()}`;
+                document.getElementById("jsonOutput").textContent = JSON.stringify(messages, null, 2);
             });
         }
 
-        // Start listening for changes
+        // Load chat history in real-time
         displayChatsAsJSON();
     </script>
 </body>
