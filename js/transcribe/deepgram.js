@@ -1,141 +1,89 @@
 // Import Firebase modules
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-import { getFirestore, collection, addDoc, query, orderBy, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 
 // Firebase Config
 const firebaseConfig = {
-  apiKey: "AIzaSyBe9a58zaQCrBSGeWwcIVa_PnZABoH6zV4",
-  authDomain: "tudds-ccd0wn.firebaseapp.com",
-  databaseURL: "https://tudds-ccd0wn-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "tudds-ccd0wn",
-  storageBucket: "tudds-ccd0wn.appspot.com",
-  messagingSenderId: "786974954352",
-  appId: "1:786974954352:web:8cdc279d2e7dc1fb9bb5b5",
-  measurementId: "G-E1RZQYQXQN"
+    apiKey: "AIzaSyBe9a58zaQCrBSGeWwcIVa_PnZABoH6zV4",
+    authDomain: "tudds-ccd0wn.firebaseapp.com",
+    databaseURL: "https://tudds-ccd0wn-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "tudds-ccd0wn",
+    storageBucket: "tudds-ccd0wn.appspot.com",
+    messagingSenderId: "786974954352",
+    appId: "1:786974954352:web:8cdc279d2e7dc1fb9bb5b5",
+    measurementId: "G-E1RZQYQXQN"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const chatCollection = collection(db, "chats_memo");
+const userChatCollection = collection(db, "chats_memo");
 
-// 🛠️ Prevent Duplicate Transcripts
+// Prevent duplicate transcript entries
 let lastTranscript = "";
-
-// Import User Chat Manager (for direct message passing)
-import { ChatUserManager } from "./chatuser-manager.js";
-const userChatManager = new ChatUserManager();
 
 /**
  * Handles real-time audio transcription using Deepgram API
  */
 export class DeepgramTranscriber {
-  constructor(apiKey, sampleRate) {
-    this.apiKey = apiKey;
-    this.ws = null;
-    this.isConnected = false;
-    this.eventListeners = new Map();
-    this.sampleRate = sampleRate;
-    console.info('DeepgramTranscriber initialized');
-  }
-
-  async connect() {
-    try {
-      const url = `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${this.sampleRate}`;
-      console.info('Attempting to connect to Deepgram WebSocket...');
-
-      this.ws = new WebSocket(url, ['token', this.apiKey]);
-      this.ws.binaryType = 'arraybuffer';
-
-      this.ws.onopen = () => {
-        this.isConnected = true;
-        console.info('WebSocket connection established');
-
-        const config = {
-          type: 'Configure',
-          features: {
-            model: 'nova-2',
-            language: 'en-US',
-            encoding: 'linear16',
-            sample_rate: this.sampleRate,
-            channels: 1,
-            interim_results: false, // Only final transcriptions
-            punctuate: true,
-            endpointing: 800
-          },
-        };
-
-        console.debug('Sending configuration:', config);
-        this.ws.send(JSON.stringify(config));
-        this.emit('connected');
-      };
-
-      this.ws.onmessage = async (event) => {
-        try {
-          const response = JSON.parse(event.data);
-          if (response.type === 'Results') {
-            const transcript = response.channel?.alternatives[0]?.transcript;
-
-            if (transcript && transcript !== lastTranscript) {
-              console.debug('Received transcript:', transcript);
-
-              // 🛠️ Fix: Pass to `chatuser-manager.js` instead of saving directly
-              userChatManager.addUserMessage(transcript);
-
-              this.emit('transcription', transcript);
-              lastTranscript = transcript;
-            }
-          }
-        } catch (error) {
-          console.error('Error processing WebSocket message:', error);
-          this.emit('error', error);
-        }
-      };
-
-      this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        this.emit('error', error);
-      };
-
-      this.ws.onclose = () => {
-        console.info('WebSocket connection closed');
+    constructor(apiKey, sampleRate) {
+        this.apiKey = apiKey;
+        this.ws = null;
         this.isConnected = false;
-        this.emit('disconnected');
-      };
-
-    } catch (error) {
-      console.error('Error in connect():', error);
-      throw error;
+        this.eventListeners = new Map();
+        this.sampleRate = sampleRate;
+        console.info('DeepgramTranscriber initialized');
     }
-  }
 
-  sendAudio(audioData) {
-    if (!this.isConnected) {
-      throw new Error('WebSocket is not connected');
-    }
-    this.ws.send(audioData);
-  }
+    async connect() {
+        try {
+            const url = `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${this.sampleRate}`;
+            this.ws = new WebSocket(url, ['token', this.apiKey]);
+            this.ws.binaryType = 'arraybuffer';
 
-  disconnect() {
-    if (this.ws) {
-      this.ws.send(JSON.stringify({ type: 'CloseStream' }));
-      this.ws.close();
-      this.ws = null;
-      this.isConnected = false;
-    }
-  }
+            this.ws.onopen = () => {
+                this.isConnected = true;
+                console.info('WebSocket connection established');
+            };
 
-  on(eventName, callback) {
-    if (!this.eventListeners.has(eventName)) {
-      this.eventListeners.set(eventName, []);
-    }
-    this.eventListeners.get(eventName).push(callback);
-  }
+            this.ws.onmessage = async (event) => {
+                try {
+                    const response = JSON.parse(event.data);
+                    if (response.type === 'Results') {
+                        const transcript = response.channel?.alternatives[0]?.transcript;
 
-  emit(eventName, data) {
-    const listeners = this.eventListeners.get(eventName);
-    if (listeners) {
-      listeners.forEach(callback => callback(data));
+                        if (transcript && transcript !== lastTranscript) {
+                            console.debug('Transcribed:', transcript);
+                            
+                            // Send transcript to chatuser-manager.js
+                            window.dispatchEvent(new CustomEvent('audioTranscribed', { detail: transcript }));
+
+                            // Store transcript to prevent duplicates
+                            lastTranscript = transcript;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error processing transcription:', error);
+                }
+            };
+
+            this.ws.onerror = (error) => console.error('WebSocket error:', error);
+            this.ws.onclose = () => this.isConnected = false;
+
+        } catch (error) {
+            console.error('Error in connect():', error);
+        }
     }
-  }
+
+    sendAudio(audioData) {
+        if (this.isConnected) this.ws.send(audioData);
+    }
+
+    disconnect() {
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+            this.isConnected = false;
+        }
+    }
 }
